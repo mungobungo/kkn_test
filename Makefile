@@ -5,6 +5,7 @@ DEST:=$(PREFIX)$(PROJECT)
 REBAR=./rebar
 
 all:
+	@cp ./priv/*.config ./ebin
 	@$(REBAR) get-deps compile
 
 edoc:

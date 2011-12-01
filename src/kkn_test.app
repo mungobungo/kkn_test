@@ -2,6 +2,7 @@
  [
   {description, ""},
   {vsn, "1"},
+  {modules, [kkn_client, kkn_socket_server, kkn_test_app, kkn_test_sup, terminal_logger]},
   {registered, []},
   {applications, [
                   kernel,
