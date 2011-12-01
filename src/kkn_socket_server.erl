@@ -52,6 +52,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+    io:format("server started~n"),
     start_server(),
     {ok, #state{}}.
 
