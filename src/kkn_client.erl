@@ -24,10 +24,8 @@ client_loop(Socket, Str) ->
 	    io:format("Socket closed~n")
 
 	 
-    end,
-    client_loop(Socket, Str).
-
-
+    end.
+    
 sleep(T) ->
     receive
     after T ->

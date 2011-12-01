@@ -53,7 +53,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 init([]) ->
     io:format("server started~n"),
-    start_server(),
+    start(),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -129,16 +129,38 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-start_server()->
-    {ok, Listen} = gen_tcp:listen(9999, [binary, {packet,4},
+
+start() ->
+    spawn(fun() -> 
+		  start_parallel_server(9999),
+		  %% now go to sleep - otherwise the 
+		  %% listening socket will be closed
+		  sleep(infinity)
+	  end).
+
+start_parallel_server(Port) ->
+    {ok, Listen} = gen_tcp:listen(Port, [binary, {packet, 4},
 					 {reuseaddr, true},
 					 {active, true}]),
-    {ok, Socket} = gen_tcp:accept(Listen),
-    gen_tcp:close(Listen),
-    loop(Socket).
+    Kkn_Server = spawn(fun() -> dummyFunc()  end),
+    spawn(fun() -> par_connect(Listen, Kkn_Server) end).
 
-loop(Socket) ->
+dummyFunc() ->
     receive
+	_Any -> dummyFunc()
+    after 5000 ->
+	dummyFunc()
+end.
+
+
+par_connect(Listen, Kkn_Server) ->
+    {ok, Socket} = gen_tcp:accept(Listen),
+    spawn(fun() -> par_connect(Listen, Kkn_Server) end),
+    inet:setopts(Socket, [{packet,0},binary, {nodelay,true},{active, true}]),
+    get_request(Socket, Kkn_Server, []).
+
+get_request(Socket, Kkn_Server, L) ->
+     receive
 	{tcp, Socket, Bin} ->
 	    io:format("Server received binary = ~p~n", [Bin]),
 	    Str = binary_to_term(Bin),
@@ -146,8 +168,16 @@ loop(Socket) ->
 	    Reply = some_reply,
 	    io:format("Server replying = ~p~n", [Reply]),
 	    gen_tcp:send(Socket, term_to_binary(Reply)),
-	    loop(Socket);
+	    get_request(Socket, Kkn_Server, L);
 	{tcp_closed, Socket} ->
-	    io:format("Server socket closed~n")
-end.
+	    io:format("Server socket closed~n");
 
+	_Any  ->
+	    %% skip this
+	    get_request(Socket, Kkn_Server, L)
+    end.
+sleep(T) ->
+    receive
+    after T ->
+	    sleep(T)
+end.
