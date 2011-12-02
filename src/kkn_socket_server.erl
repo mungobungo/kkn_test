@@ -132,52 +132,84 @@ code_change(_OldVsn, State, _Extra) ->
 
 start() ->
     spawn(fun() -> 
-		  start_parallel_server(9999),
+		  start_parallel_server(3000),
 		  %% now go to sleep - otherwise the 
 		  %% listening socket will be closed
-		  sleep(infinity)
+		  lib_misc:sleep(infinity)
 	  end).
 
 start_parallel_server(Port) ->
     {ok, Listen} = gen_tcp:listen(Port, [binary, {packet, 4},
 					 {reuseaddr, true},
 					 {active, true}]),
-    Kkn_Server = spawn(fun() -> dummyFunc()  end),
-    spawn(fun() -> par_connect(Listen, Kkn_Server) end).
+    MessageServer = spawn(fun() -> something_useful() end),
+    spawn(fun() -> par_connect(Listen, MessageServer) end).
 
-dummyFunc() ->
-    receive
-	_Any -> dummyFunc()
-    after 5000 ->
-	dummyFunc()
-end.
-
-
-par_connect(Listen, Kkn_Server) ->
+par_connect(Listen, MessageServer) ->
     {ok, Socket} = gen_tcp:accept(Listen),
-    spawn(fun() -> par_connect(Listen, Kkn_Server) end),
-    inet:setopts(Socket, [{packet,0},binary, {nodelay,true},{active, true}]),
-    get_request(Socket, Kkn_Server, []).
+    spawn(fun() -> par_connect(Listen, MessageServer) end),
+    inet:setopts(Socket, [{packet,4},binary, {nodelay,true},{active, true}]),
+    io:format("connecting ~p~n", [Listen]),
+    loop(Socket).
 
-get_request(Socket, Kkn_Server, L) ->
-     receive
-	{tcp, Socket, Bin} ->
-	    io:format("Server received binary = ~p~n", [Bin]),
-	    Str = binary_to_term(Bin),
-	    io:format("Server (unpacked) ~p~n",[Str]),
-	    Reply = some_reply,
-	    io:format("Server replying = ~p~n", [Reply]),
-	    gen_tcp:send(Socket, term_to_binary(Reply)),
-	    get_request(Socket, Kkn_Server, L);
-	{tcp_closed, Socket} ->
-	    io:format("Server socket closed~n");
 
-	_Any  ->
-	    %% skip this
-	    get_request(Socket, Kkn_Server, L)
-    end.
-sleep(T) ->
+loop(Socket) ->
     receive
-    after T ->
-	    sleep(T)
+	{tcp, Socket, Bin} ->
+	    io:format("Server received binary = ~p~n" ,[Bin]),
+	    Command = binary_to_term(Bin),
+	    io:format("Server (unpacked) ~p~n" ,[Command]),
+	    Reply = handle_command(Command),
+	    io:format("Server replying = ~p~n" ,[Reply]),
+	    ok = gen_tcp:send(Socket, term_to_binary(Reply)),
+	    case Reply of
+		death ->
+		    io:format("And now server is closing everything"),
+		    gen_tcp:close(Socket);
+		_Default ->
+%%		   ok = gen_tcp:send(Socket, term_to_binary(default_handler)),
+		    loop(Socket)
+	    end;
+
+	    
+	{tcp_closed, Socket} ->
+	    io:format("Server socket closed~n" );
+	Any ->
+	    io:format("Server received something funny~p~n", [Any])
 end.
+
+handle_command(get) ->
+    { Xml, _Rest } = xmerl_scan:string("<xml><doc><test>4</test> <test>3</test></doc></xml>"),
+    [Four, _Three] = xmerl_xpath:string("//test/text()", Xml),
+    {_, _, _, _, _, Resp} = Four,
+    Resp;
+
+handle_command(who) ->
+    io:format("rip dennis~n"),
+    rip_dennis;
+
+handle_command(i_am_devil) ->
+    redirect;
+
+handle_command(death_confirmed)->
+    death;
+
+handle_command(_) ->
+    unknown.
+
+
+
+something_useful() ->
+    io:format("something happening handerl ~n"),
+    
+    receive
+	{_From, _Smth} ->
+	    io:format("inside handler receive~n"),
+	    something_useful();
+	_Any ->
+	    io:format("received something unknown~n"),
+	    something_useful()
+%%    after 3000 ->
+%%	    io:format("looping again"),
+%%	    songs()
+    end.
